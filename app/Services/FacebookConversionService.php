@@ -2,6 +2,7 @@
 namespace App\Services;
 
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 class FacebookConversionService
 {
@@ -14,8 +15,16 @@ class FacebookConversionService
         $this->accessToken = config('facebook.access_token');
     }
 
-    public function sendEvent($eventName, $userData, $customData)
+    public function sendEvent($eventName, $userData, $customData): array
     {
+        if (empty($this->pixelId) || empty($this->accessToken)) {
+            return [
+                'ok' => false,
+                'events_received' => 0,
+                'message' => 'Facebook conversion credentials are not configured.',
+            ];
+        }
+
         $url = "https://graph.facebook.com/v17.0/{$this->pixelId}/events";
 
         $payload = [
@@ -31,8 +40,31 @@ class FacebookConversionService
             'access_token' => $this->accessToken,
         ];
 
-        $response = Http::post($url, $payload);
+        try {
+            $response = Http::timeout(8)->post($url, $payload);
+            $responseData = $response->json() ?? [];
 
-        return $response->json();
+            if (!$response->successful()) {
+                Log::warning('Facebook Conversion API request failed.', [
+                    'event' => $eventName,
+                    'status' => $response->status(),
+                    'response' => $responseData,
+                ]);
+            }
+
+            $responseData['ok'] = $response->successful();
+            return $responseData;
+        } catch (\Throwable $exception) {
+            Log::warning('Facebook Conversion API exception.', [
+                'event' => $eventName,
+                'message' => $exception->getMessage(),
+            ]);
+
+            return [
+                'ok' => false,
+                'events_received' => 0,
+                'message' => $exception->getMessage(),
+            ];
+        }
     }
 }

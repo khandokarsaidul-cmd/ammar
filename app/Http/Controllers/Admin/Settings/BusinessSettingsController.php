@@ -346,14 +346,18 @@ class BusinessSettingsController extends BaseController
         return view(BusinessSettings::ANALYTICS_INDEX[VIEW]);
     }
 
-    public function updateAnalytics(Request $request): RedirectResponse
+    public function updateAnalytics(AnalyticsRequest $request): RedirectResponse
     {
         if ($request['type'] == 'pixel_analytics') {
             $this->businessSettingRepo->updateOrInsert(type: 'pixel_analytics', value: $request['value'] ?? '');
         }
 
-        if ($request['type'] == 'google_tag_manager_id') {
-            $this->businessSettingRepo->updateOrInsert(type: 'google_tag_manager_id', value: $request['value'] ?? '');
+        if ($request['type'] == 'google_tag_manager_web_id') {
+            $this->businessSettingRepo->updateOrInsert(type: 'google_tag_manager_web_id', value: $request['value'] ?? '');
+        }
+
+        if ($request['type'] == 'google_tag_manager_server_id') {
+            $this->businessSettingRepo->updateOrInsert(type: 'google_tag_manager_server_id', value: $request['value'] ?? '');
         }
         Toastr::success(translate('Data_updated'));
         return back();

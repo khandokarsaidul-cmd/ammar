@@ -80,7 +80,7 @@
                                             <span class="text-danger">*</span>
                                             </label>
                                                            
-                                    <input type="tel" class="form-control" id="phone" @if(auth('customer')->check()) value="{{auth('customer')->user()->phone}}" @endif placeholder="১১ ডিজিটের মোবাইল নম্বর লিখুন" name="p hone" {{$shippingAddresses->count()==0?'required':''}} pattern="[0-9]{11}" minlength="11" 
+                                    <input type="tel" class="form-control" id="phone" @if(auth('customer')->check()) value="{{auth('customer')->user()->phone}}" @endif placeholder="১১ ডিজিটের মোবাইল নম্বর লিখুন" name="phone" {{$shippingAddresses->count()==0?'required':''}} pattern="[0-9]{11}" minlength="11" 
   maxlength="11" oninput="this.value = this.value.replace(/[^0-9]/g, '')" >
                                             </div>
                                             </div>
@@ -128,16 +128,15 @@
                                                                 
                                                             </div>
                                                         </div>--}}
-                                                        @if(auth('customer')->check())
                                                          <div class="row">
                                                         <div class="col-sm-6">
                                                             <div class="form-group">
                                                                 <label>Customer District
-                                                                @if($shippingAddresses->count()==0)
+                                                                @if(!auth('customer')->check() || $shippingAddresses->count()==0)
                                                                     <span class="text-danger">*</span>
                                                                     @endif
                                                                 </label>
-                                                               <select name="district" id="district" class="form-control selectpicker" data-live-search="true" >
+                                                               <select name="district" id="district" class="form-control selectpicker" data-live-search="true" {{ !auth('customer')->check() || $shippingAddresses->count()==0 ? 'required' : '' }}>
                                                         <option value="">Select District</option>         
                                                         @foreach($districts as $district)
     <option value="{{ $district->id }}" 
@@ -153,16 +152,15 @@
                                             <div class="col-sm-6">
                                             <div class="form-group">
                                             <label>Customer Area
-                                            @if($shippingAddresses->count()==0)
+                                            @if(!auth('customer')->check() || $shippingAddresses->count()==0)
                                             <span class="text-danger">*</span>
                                             @endif
                                             </label>
-                                           <select name="thana" id="thana" class="form-control selectpicker" data-live-search="true"  >
+                                           <select name="thana" id="thana" class="form-control selectpicker" data-live-search="true" {{ !auth('customer')->check() || $shippingAddresses->count()==0 ? 'required' : '' }}>
                                             </select>
                                             </div>
                                             </div>
                                             </div>
-                                             @endif
                                                          
                                                          
                                                         <div class="col-12">

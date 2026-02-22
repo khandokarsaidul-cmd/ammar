@@ -32,14 +32,28 @@
             <div class="col-lg-6">
                 <div class="card">
                     <div class="card-body">
-                        @php($google_tag_manager_id = getWebConfig(name: 'google_tag_manager_id'))
+                        @php($google_tag_manager_web_id = getWebConfig(name: 'google_tag_manager_web_id'))
                         <form action="{{env('APP_MODE')!='demo'?route('admin.business-settings.analytics-update'):'javascript:'}}" method="post"
                             enctype="multipart/form-data">
                             @csrf
                             <div class="form-group">
-                                <label class="title-color d-flex">{{translate('google_tag_manager_id')}}</label>
-                                <input type="hidden" name="type" value="google_tag_manager_id">
-                                <textarea type="text" placeholder="{{translate('google_tag_manager_script_id_from_google')}}" class="form-control" name="value" >{{env('APP_MODE')!='demo'?$google_tag_manager_id??'':''}}</textarea>
+                                <label class="title-color d-flex">Google Tag Manager ID (Web)</label>
+                                <input type="hidden" name="type" value="google_tag_manager_web_id">
+                                <textarea type="text" placeholder="{{translate('google_tag_manager_script_id_from_google')}}" class="form-control" name="value" >{{env('APP_MODE')!='demo'?$google_tag_manager_web_id??'':''}}</textarea>
+                            </div>
+                            <div class="d-flex justify-content-end">
+                                <button type="{{env('APP_MODE')!='demo'?'submit':'button'}}"  class="btn btn--primary px-5 {{env('APP_MODE')!='demo'?'':'call-demo'}}">{{translate('save')}}</button>
+                            </div>
+                        </form>
+                        <hr>
+                        @php($google_tag_manager_server_id = getWebConfig(name: 'google_tag_manager_server_id'))
+                        <form action="{{env('APP_MODE')!='demo'?route('admin.business-settings.analytics-update'):'javascript:'}}" method="post"
+                            enctype="multipart/form-data">
+                            @csrf
+                            <div class="form-group">
+                                <label class="title-color d-flex">Google Tag Manager ID (Server)</label>
+                                <input type="hidden" name="type" value="google_tag_manager_server_id">
+                                <textarea type="text" placeholder="GTM-XXXXXXX" class="form-control" name="value" >{{env('APP_MODE')!='demo'?$google_tag_manager_server_id??'':''}}</textarea>
                             </div>
                             <div class="d-flex justify-content-end">
                                 <button type="{{env('APP_MODE')!='demo'?'submit':'button'}}"  class="btn btn--primary px-5 {{env('APP_MODE')!='demo'?'':'call-demo'}}">{{translate('save')}}</button>

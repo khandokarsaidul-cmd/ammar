@@ -2206,6 +2206,8 @@ return [
 	"pixel_analytics_your_pixel_id" => "Pixel analytics your pixel id",
 	"pixel_analytics_your_pixel_id_from_facebook" => "Pixel analytics your pixel id from facebook",
 	"google_tag_manager_id" => "Google tag manager id",
+	"google_tag_manager_web_id" => "Google tag manager web id",
+	"google_tag_manager_server_id" => "Google tag manager server id",
 	"google_tag_manager_script_id_from_google" => "Google tag manager script id from google",
 	"shop followers" => "Shop followers",
 	"get_In" => "Get In",
@@ -7193,4 +7195,9 @@ return [
 	"Or_copy_link" => "Or copy link",
 	"copy" => "Copy",
 	"You_have_not_any_order_yet" => "You have not any order yet",
+	"Firebase_Auth" => "Firebase Auth",
+	"want_to_turn_ON_map" => "Want to turn ON map",
+	"want_to_turn_OFF_map" => "Want to turn OFF map",
+	"if_enabled,map_will_be_available_in_the_system" => "If enabled map will be available in the system",
+	"if_enabled,map_will_be_hidden_from_the_system" => "If enabled map will be hidden from the system",
 ];

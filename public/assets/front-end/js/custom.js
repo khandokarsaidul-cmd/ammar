@@ -1245,6 +1245,16 @@ function checkoutFromCartList() {
                     : $("#route-checkout-details").data("url");
             }
         },
+        error: function (xhr) {
+            let message = "Something went wrong!";
+            try {
+                if (xhr.responseJSON && xhr.responseJSON.message) {
+                    message = xhr.responseJSON.message;
+                }
+            } catch (e) {
+            }
+            toastr.error(message);
+        },
         complete: function () {
             $("#loading").hide();
         },

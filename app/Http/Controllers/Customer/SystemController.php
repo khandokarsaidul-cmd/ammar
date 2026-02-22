@@ -252,44 +252,39 @@ class SystemController extends Controller
      */
     public function getChooseShippingAddressOther(Request $request): JsonResponse
     {
+        try {
         $shipping = [];
         $billing = [];
-        parse_str($request['shipping'], $shipping);
-        parse_str($request['billing'], $billing);
+        parse_str($request['shipping'] ?? '', $shipping);
+        parse_str($request['billing'] ?? '', $billing);
         
-        if (isset($shipping['phone'])) {
-            $shippingPhoneValue = preg_replace('/[^0-9]/', '', $shipping['phone']);
+        if (!empty($shipping['phone'])) {
+            $shippingPhoneValue = preg_replace('/[^0-9]/', '', (string) $shipping['phone']);
             $shippingPhoneLength = strlen($shippingPhoneValue);
             if ($shippingPhoneLength < 11) {
-                return response()->json([
-                    'errors' => 'The phone number must be at least 11 characters'
-                ], 403);
+                return $this->shippingErrorResponse('The phone number must be at least 11 characters', 422);
             }
            
-            if (strlen($shipping['phone']) > 11) {
-      $mdig = substr($shipping['phone'], -11);
+            if ($shippingPhoneLength > 11) {
+      $mdig = substr($shippingPhoneValue, -11);
       $shipping['phone'] = '+88'.$mdig;
       }else{
-      $shipping['phone'] = '+88'.$shipping['phone'];
+      $shipping['phone'] = '+88'.$shippingPhoneValue;
       }
            
         }
 
-        if ($request['billing_addresss_same_shipping'] == 'false' && isset($billing['billing_phone'])) {
-            $billingPhoneValue = preg_replace('/[^0-9]/', '', $billing['billing_phone']);
+        if ($request['billing_addresss_same_shipping'] == 'false' && !empty($billing['billing_phone'])) {
+            $billingPhoneValue = preg_replace('/[^0-9]/', '', (string) $billing['billing_phone']);
             $billingPhoneLength = strlen($billingPhoneValue);
             if ($billingPhoneLength < 11) {
-                return response()->json([
-                    'errors' => translate('The phone number must be at least 11 characters')
-                ], 403);
+                return $this->shippingErrorResponse(translate('The phone number must be at least 11 characters'), 422);
             }
 
             if ($billingPhoneLength > 20) {
-                return response()->json([
-                    'errors' => translate('The_phone_number_may_not_be_greater_than_20_characters')
-                ], 403);
+                return $this->shippingErrorResponse(translate('The_phone_number_may_not_be_greater_than_20_characters'), 422);
             }
-            $billing['billing_phone'] = '+88'.$billing['billing_phone'];
+            $billing['billing_phone'] = '+88'.$billingPhoneValue;
         }
         
         $cart = \App\Utils\CartManager::get_cart(type: 'checked');
@@ -315,10 +310,13 @@ class SystemController extends Controller
                 $totalShippingCost=$getShippingCost;
             }
 $total = $subTotal+$totalTax+$totalShippingCost-$coupon_dis-$totalDiscountOnProduct-$orderWiseShippingDiscount;
-$facebookService = new FacebookConversionService();
+    $shippingName = (string)($shipping['contact_person_name'] ?? '');
+    $shippingPhone = (string)($shipping['phone'] ?? '');
+
+    $facebookService = new FacebookConversionService();
     $userData = [
-        'em' => hash('sha256', $shipping['contact_person_name']),
-        'ph' => hash('sha256', $shipping['phone']),
+        'em' => $shippingName !== '' ? hash('sha256', strtolower(trim($shippingName))) : null,
+        'ph' => $shippingPhone !== '' ? hash('sha256', preg_replace('/[^0-9]/', '', $shippingPhone)) : null,
         'fn' =>hash('sha256', 'Guest First Name'),
                     'ln' =>hash('sha256', 'Guest Last Name'),
                         'ct' => hash('sha256', 'Dhaka'),
@@ -347,7 +345,7 @@ $facebookService = new FacebookConversionService();
             ];
 
     $response = $facebookService->sendEvent('InitiateCheckout', $userData, $customData);
-    if ($response['events_received'] ?? 0 > 0) {
+    if (($response['events_received'] ?? 0) > 0) {
                 \Log::info('Facebook Conversion API: InitiateCheckout Event successfully sent.', $response);
             } else {
                 \Log::error('Facebook Conversion API: InitiateCheckout Failed to send event.', $response);
@@ -364,21 +362,32 @@ $facebookService = new FacebookConversionService();
         $addressId = $shipping['shipping_method_id'] ?? 0;
 
         if (isset($shipping['shipping_method_id'])) {
-            if ($shipping['contact_person_name'] == null || $shipping['address'] == null || $shipping['phone'] == null || ($isGuestCustomer && $shipping['email'] == null)) {
-                return response()->json([
-                    'errors' => translate('Fill_all_required_fields_of_shipping_address')
-                ], 403);
-            } elseif (!self::delivery_country_exist_check($shipping['country'])) {
-                return response()->json([
-                    'errors' => translate('Delivery_unavailable_in_this_country.')
-                ], 403);
+            if (($shipping['contact_person_name'] ?? null) == null || ($shipping['address'] ?? null) == null || ($shipping['phone'] ?? null) == null || ($isGuestCustomer && ($shipping['email'] ?? null) == null)) {
+                return $this->shippingErrorResponse(translate('Fill_all_required_fields_of_shipping_address'), 422);
+            } elseif (!self::delivery_country_exist_check($shipping['country'] ?? null)) {
+                return $this->shippingErrorResponse(translate('Delivery_unavailable_in_this_country.'), 422);
+            }
+
+            if ($isGuestCustomer && (empty($shipping['district']) || empty($shipping['thana']))) {
+                return $this->shippingErrorResponse('Customer District and Customer Area are required.', 422);
             }
           
         }
 
         if (isset($shipping['save_address']) && $shipping['save_address'] == 'on') {
-            $dis = DB::table('districts')->where('id', $shipping['district'])->value('name');
-            $than = DB::table('thanas')->where('id', $shipping['thana'])->first();
+            $districtId = $shipping['district'] ?? null;
+            $thanaId = $shipping['thana'] ?? null;
+            if (!$districtId || !$thanaId) {
+                return $this->shippingErrorResponse('Please select district and area.', 422);
+            }
+            $dis = DB::table('districts')->where('id', $districtId)->value('name');
+            $than = DB::table('thanas')->where('id', $thanaId)->first();
+        if (!$dis) {
+            return $this->shippingErrorResponse('Selected district is invalid.', 422);
+        }
+        if (!$than) {
+            return $this->shippingErrorResponse('Selected area is invalid.', 422);
+        }
         $faddress = $shipping['address'] . ', ' . $than->tname . ', ' . $dis;
             
             $addressId = ShippingAddress::insertGetId([
@@ -387,20 +396,31 @@ $facebookService = new FacebookConversionService();
                 'contact_person_name' => $shipping['contact_person_name'],
                 'address_type' => $shipping['address_type'],
                 'address' => $faddress,
-                'city' => $shipping['city'],
-                'country' => $shipping['country'],
-                'phone' => $shipping['phone'],
-                'latitude' => $shipping['latitude'],
-                'longitude' => $shipping['longitude'],
-                'district' => $shipping['district'],
+                'city' => $shipping['city'] ?? '',
+                'country' => $shipping['country'] ?? '',
+                'phone' => $shipping['phone'] ?? '',
+                'latitude' => $shipping['latitude'] ?? '',
+                'longitude' => $shipping['longitude'] ?? '',
+                'district' => $districtId,
                 'area' => $than->id,
                 'email' => auth('customer')->check() ? null : $shipping['email'],
                 'is_billing' => 0,
             ]);
 
         } elseif (isset($shipping['update_address']) && $shipping['update_address'] == 'on') {
-            $dis = DB::table('districts')->where('id', $shipping['district'])->value('name');
-            $than = DB::table('thanas')->where('id', $shipping['thana'])->first();
+            $districtId = $shipping['district'] ?? null;
+            $thanaId = $shipping['thana'] ?? null;
+            if (!$districtId || !$thanaId) {
+                return $this->shippingErrorResponse('Please select district and area.', 422);
+            }
+            $dis = DB::table('districts')->where('id', $districtId)->value('name');
+            $than = DB::table('thanas')->where('id', $thanaId)->first();
+        if (!$dis) {
+            return $this->shippingErrorResponse('Selected district is invalid.', 422);
+        }
+        if (!$than) {
+            return $this->shippingErrorResponse('Selected area is invalid.', 422);
+        }
         $faddress = $shipping['address'] . ', ' . $than->tname . ', ' . $dis;
             
             $getShipping = ShippingAddress::find($addressId);
@@ -410,16 +430,24 @@ $facebookService = new FacebookConversionService();
             $getShipping->city = $shipping['city'];
             $getShipping->country = $shipping['country'];
             $getShipping->phone = $shipping['phone'];
-            $getShipping->latitude = $shipping['latitude'];
-            $getShipping->longitude = $shipping['longitude'];
-            $getShipping->district = $shipping['district'];
+            $getShipping->latitude = $shipping['latitude'] ?? '';
+            $getShipping->longitude = $shipping['longitude'] ?? '';
+            $getShipping->district = $districtId;
             $getShipping->area = $than->id;
             $getShipping->save();
 
         } elseif (isset($shipping['shipping_method_id']) && !isset($shipping['update_address']) && !isset($shipping['save_address'])) {
         
         if ($isGuestCustomer) {
-            $faddress = $shipping['address'];
+            if (empty($shipping['district']) || empty($shipping['thana'])) {
+                return $this->shippingErrorResponse('Customer District and Customer Area are required.', 422);
+            }
+            $districtName = DB::table('districts')->where('id', $shipping['district'])->value('name');
+            $thanaData = DB::table('thanas')->where('id', $shipping['thana'])->first();
+            if (!$districtName || !$thanaData) {
+                return $this->shippingErrorResponse('Selected district or area is invalid.', 422);
+            }
+            $faddress = $shipping['address'] . ', ' . $thanaData->tname . ', ' . $districtName;
         } else {
     
         $dis = DB::table('districts')->where('id', $shipping['district'])->value('name');
@@ -440,6 +468,8 @@ $facebookService = new FacebookConversionService();
                 'email' => auth('customer')->check() ? null : $shipping['email'],
                 'latitude' => $shipping['latitude'] ?? '',
                 'longitude' => $shipping['longitude'] ?? '',
+                'district' => $shipping['district'] ?? null,
+                'area' => $shipping['thana'] ?? null,
                 'is_billing' => 0,
             ]);
         }
@@ -451,14 +481,10 @@ $facebookService = new FacebookConversionService();
             $billingAddressId = $billing['billing_method_id'];
 
 
-            if ($billing['billing_contact_person_name'] == null || !isset($billing['billing_address']) || $billing['billing_address'] == null || $billing['billing_phone'] == null || ($isGuestCustomer && $billing['billing_contact_email'] == null)) {
-                return response()->json([
-                    'errors' => translate('Fill_all_required_fields_of_billing_address')
-                ], 403);
-            } elseif (!self::delivery_country_exist_check($billing['billing_country'])) {
-                return response()->json([
-                    'errors' => translate('Delivery_unavailable_in_this_country')
-                ], 403);
+            if (($billing['billing_contact_person_name'] ?? null) == null || !isset($billing['billing_address']) || ($billing['billing_address'] ?? null) == null || ($billing['billing_phone'] ?? null) == null || ($isGuestCustomer && ($billing['billing_contact_email'] ?? null) == null)) {
+                return $this->shippingErrorResponse(translate('Fill_all_required_fields_of_billing_address'), 422);
+            } elseif (!self::delivery_country_exist_check($billing['billing_country'] ?? null)) {
+                return $this->shippingErrorResponse(translate('Delivery_unavailable_in_this_country'), 422);
             }
          
 
@@ -506,48 +532,40 @@ $facebookService = new FacebookConversionService();
                 ]);
             }
         } elseif ($request['billing_addresss_same_shipping'] == 'false' && !isset($billing['billing_method_id']) && $physicalProduct != 'yes') {
-            return response()->json([
-                'errors' => translate('Fill_all_required_fields_of_billing_address')
-            ], 403);
+            return $this->shippingErrorResponse(translate('Fill_all_required_fields_of_billing_address'), 422);
         }
 
         session()->put('address_id', $addressId);
         session()->put('billing_address_id', $billingAddressId);
 
-        if ($request['is_check_create_account'] && $isGuestCustomer) {
+        if ($request->boolean('is_check_create_account') && $isGuestCustomer) {
             if (empty($request['customer_password']) || empty($request['customer_confirm_password'])) {
-                return response()->json([
-                    'errors' => translate('The_password_or_confirm_password_can_not_be_empty')
-                ], 403);
+                return $this->shippingErrorResponse(translate('The_password_or_confirm_password_can_not_be_empty'), 422);
             }
             if ($request['customer_password'] != $request['customer_confirm_password']) {
-                return response()->json([
-                    'errors' => translate('The_password_and_confirm_password_must_match')
-                ], 403);
+                return $this->shippingErrorResponse(translate('The_password_and_confirm_password_must_match'), 422);
             }
             if (strlen($request['customer_password']) < 7 || strlen($request['customer_confirm_password']) < 7) {
-                return response()->json([
-                    'errors' => translate('The_password_must_be_at_least_8_characters')
-                ], 403);
+                return $this->shippingErrorResponse(translate('The_password_must_be_at_least_8_characters'), 422);
             }
-            if ($request['shipping']) {
+            if (!empty($shipping)) {
                 $newCustomerAddress = [
-                    'name' => $shipping['contact_person_name'],
-                    'email' => $shipping['email'],
-                    'phone' => $shipping['phone'],
+                    'name' => $shipping['contact_person_name'] ?? '',
+                    'email' => $shipping['email'] ?? '',
+                    'phone' => $shipping['phone'] ?? '',
                     'password' => $request['customer_password'],
                 ];
             } else {
                 $newCustomerAddress = [
-                    'name' => $billing['billing_contact_person_name'],
-                    'email' => $billing['billing_contact_email'],
-                    'phone' => $billing['billing_phone'],
+                    'name' => $billing['billing_contact_person_name'] ?? '',
+                    'email' => $billing['billing_contact_email'] ?? '',
+                    'phone' => $billing['billing_phone'] ?? '',
                     'password' => $request['customer_password'],
                 ];
             }
 
             if (User::where(['email' => $newCustomerAddress['email']])->orWhere(['phone' => $newCustomerAddress['phone']])->first()) {
-                return response()->json(['errors' => translate('Already_registered')], 403);
+                return $this->shippingErrorResponse(translate('Already_registered'), 409);
             }else{
                 $newCustomerRegister = self::getRegisterNewCustomer(request: $request, address: $newCustomerAddress);
                 session()->put('newCustomerRegister', $newCustomerRegister);
@@ -557,7 +575,25 @@ $facebookService = new FacebookConversionService();
             session()->forget('newRegisterCustomerInfo');
         }
 
-        return response()->json([], 200);
+        return response()->json(['status' => 1], 200);
+        } catch (\Throwable $exception) {
+            \Log::error('choose-shipping-address-other failed', [
+                'message' => $exception->getMessage(),
+                'trace' => $exception->getTraceAsString(),
+            ]);
+            return $this->shippingErrorResponse('Unable to save shipping address. Please try again.', 500);
+        }
+    }
+
+    private function shippingErrorResponse(string $message, int $status = 422): JsonResponse
+    {
+        return response()->json([
+            'status' => 0,
+            'message' => $message,
+            'errors' => [
+                ['message' => $message]
+            ],
+        ], $status);
     }
 
     function getRegisterNewCustomer($request, $address): array

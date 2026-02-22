@@ -62,8 +62,8 @@
             --bs-btn-border-color: {{ $web_config['primary_color'] }} !important;
         }
     </style>
-    @php($google_tag_manager_id = getWebConfig(name: 'google_tag_manager_id'))
-    @if($google_tag_manager_id )
+    @php($googleTagManagerWebId = getWebConfig(name: 'google_tag_manager_web_id'))
+    @if($googleTagManagerWebId)
         <script>(function (w, d, s, l, i) {
                 w[l] = w[l] || [];
                 w[l].push({
@@ -76,7 +76,7 @@
                 j.src =
                     'https://www.googletagmanager.com/gtm.js?id=' + i + dl;
                 f.parentNode.insertBefore(j, f);
-            })(window, document, 'script', 'dataLayer', '{{$google_tag_manager_id}}');
+            })(window, document, 'script', 'dataLayer', '{{$googleTagManagerWebId}}');
         </script>
     @endif
     @php($pixel_analytices_user_code =getWebConfig(name: 'pixel_analytics'))
@@ -121,9 +121,9 @@
     }
     setThemeMode();
 </script>
-@if($google_tag_manager_id)
+@if($googleTagManagerWebId)
     <noscript>
-        <iframe class="d-none visibility-hidden" src="https://www.googletagmanager.com/ns.html?id={{$google_tag_manager_id}}"
+        <iframe class="d-none visibility-hidden" src="https://www.googletagmanager.com/ns.html?id={{$googleTagManagerWebId}}"
                 height="0" width="0"></iframe>
     </noscript>
 @endif

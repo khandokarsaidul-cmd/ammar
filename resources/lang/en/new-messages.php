@@ -3072,6 +3072,8 @@ return [
 	"pixel_analytics_your_pixel_id" => "Pixel analytics your pixel id",
 	"pixel_analytics_your_pixel_id_from_facebook" => "Pixel analytics your pixel id from facebook",
 	"google_tag_manager_id" => "Google tag manager id",
+	"google_tag_manager_web_id" => "Google tag manager web id",
+	"google_tag_manager_server_id" => "Google tag manager server id",
 	"google_tag_manager_script_id_from_google" => "Google tag manager script id from google",
 	"shop followers" => "Shop followers",
 	"get_In" => "Get In",
@@ -9119,3 +9121,5 @@ return [
 	"delivery_zip_code_added_successfully" => "Delivery zip code added successfully",
 	"Delivery_unavailable_in_this_country!" => "Delivery unavailable in this country!",
 ];
+
+

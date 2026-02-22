@@ -1,5 +1,3 @@
-
-text/x-generic WebController.php ( PHP script, UTF-8 Unicode text )
 <?php
 
 namespace App\Http\Controllers\Web;
@@ -61,6 +59,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Session;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -425,61 +424,85 @@ public function phoneSave(Request $request)
 
     public function checkout_details(Request $request)
     {
-         $districts=DB::table('districts')->get();
-        if (
-            (!auth('customer')->check() || Cart::where(['customer_id' => auth('customer')->id()])->count() < 1)
-            && (!getWebConfig(name: 'guest_checkout') || !session()->has('guest_id') || !session('guest_id'))
-        ) {
-            Toastr::error(translate('invalid_access'));
-            return redirect('/');
-        }
-
-        $response = self::checkValidationForCheckoutPages($request);
-        if ($response['status'] == 0) {
-            foreach ($response['message'] as $message) {
-                Toastr::error($message);
+        try {
+            // Custom checkout location tables may be absent on some deployments.
+            $districts = collect();
+            if (Schema::hasTable('districts')) {
+                $districts = DB::table('districts')->get();
             }
-            return isset($response['redirect']) ? redirect($response['redirect']) : redirect('/');
+
+            if (
+                (!auth('customer')->check() || Cart::where(['customer_id' => auth('customer')->id()])->count() < 1)
+                && (!getWebConfig(name: 'guest_checkout') || !session()->has('guest_id') || !session('guest_id'))
+            ) {
+                Toastr::error(translate('invalid_access'));
+                return redirect('/');
+            }
+
+            $response = self::checkValidationForCheckoutPages($request);
+            if ($response['status'] == 0) {
+                foreach ($response['message'] as $message) {
+                    Toastr::error($message);
+                }
+                return isset($response['redirect']) ? redirect($response['redirect']) : redirect('/');
+            }
+
+            $countryRestrictStatus = getWebConfig(name: 'delivery_country_restriction');
+            $zipRestrictStatus = getWebConfig(name: 'delivery_zip_code_area_restriction');
+            $countries = $countryRestrictStatus ? $this->get_delivery_country_array() : COUNTRIES;
+            $zipCodes = $zipRestrictStatus ? DeliveryZipCode::all() : 0;
+            $billingInputByCustomer = getWebConfig(name: 'billing_input_by_customer');
+            $defaultLocation = getWebConfig(name: 'default_location');
+
+            $user = Helpers::getCustomerInformation($request);
+            $shippingAddresses = ShippingAddress::where([
+                'customer_id' => $user == 'offline' ? session('guest_id') : auth('customer')->id(),
+                'is_guest' => $user == 'offline' ? 1 : '0',
+            ])->get();
+
+            $countriesName = [];
+            $countriesCode = [];
+            foreach ($countries as $country) {
+                $countriesName[] = $country['name'];
+                $countriesCode[] = $country['code'];
+            }
+
+            return view(VIEW_FILE_NAMES['order_shipping'], [
+                'physical_product_view' => $response['physical_product_view'],
+                'countries' => $countries,
+                'districts' => $districts,
+                'countriesName' => $countriesName,
+                'countriesCode' => $countriesCode,
+                'billing_input_by_customer' => $billingInputByCustomer,
+                'default_location' => $defaultLocation,
+                'shipping_addresses' => $shippingAddresses,
+                'billing_addresses' => $shippingAddresses
+            ]);
+        } catch (\Throwable $exception) {
+            \Log::error('Checkout details failed.', [
+                'message' => $exception->getMessage(),
+                'trace' => $exception->getTraceAsString(),
+            ]);
+
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => translate('Something_went_wrong'),
+                ], 500);
+            }
+
+            Toastr::error(translate('Something_went_wrong'));
+            return redirect()->route('shop-cart');
         }
-
-        $countryRestrictStatus = getWebConfig(name: 'delivery_country_restriction');
-        $zipRestrictStatus = getWebConfig(name: 'delivery_zip_code_area_restriction');
-        $countries = $countryRestrictStatus ? $this->get_delivery_country_array() : COUNTRIES;
-        $zipCodes = $zipRestrictStatus ? DeliveryZipCode::all() : 0;
-        $billingInputByCustomer = getWebConfig(name: 'billing_input_by_customer');
-        $defaultLocation = getWebConfig(name: 'default_location');
-
-        $user = Helpers::getCustomerInformation($request);
-        $shippingAddresses = ShippingAddress::where([
-            'customer_id' => $user == 'offline' ? session('guest_id') : auth('customer')->id(),
-            'is_guest' => $user == 'offline' ? 1 : '0',
-        ])->get();
-
-        $countriesName = [];
-        $countriesCode = [];
-        foreach ($countries as $country) {
-            $countriesName[] = $country['name'];
-            $countriesCode[] = $country['code'];
-        }
-        
-       
-        
-        return view(VIEW_FILE_NAMES['order_shipping'], [
-            'physical_product_view' => $response['physical_product_view'],
-            'countries' => $countries,
-            'districts' => $districts,
-            'countriesName' => $countriesName,
-            'countriesCode' => $countriesCode,
-            'billing_input_by_customer' => $billingInputByCustomer,
-            'default_location' => $defaultLocation,
-            'shipping_addresses' => $shippingAddresses,
-            'billing_addresses' => $shippingAddresses
-        ]);
     }
     
     public function getthana($id)
     {
-        $data=DB::table('thanas')->where('district_id',$id)->get();
+        if (!Schema::hasTable('thanas')) {
+            return response()->json([]);
+        }
+
+        $data = DB::table('thanas')->where('district_id', $id)->get();
         return response()->json($data);
 
     }
@@ -551,7 +574,7 @@ public function phoneSave(Request $request)
     try {
         // 1️⃣ Validate payment method
         if ($request['payment_method'] != 'cash_on_delivery') {
-            return $this->errorResponse($request, translate('Something_went_wrong'));
+            return $this->errorResponse($request, translate('Something_went_wrong'), null, 422);
         }
 
         // 2️⃣ Generate group ID & get checked cart groups
@@ -564,7 +587,8 @@ public function phoneSave(Request $request)
             return $this->errorResponse(
                 $request,
                 translate('check_minimum_order_amount_requirement'),
-                route('shop-cart')
+                route('shop-cart'),
+                422
             );
         }
 
@@ -575,7 +599,7 @@ public function phoneSave(Request $request)
             $newCustomerRegister = session('newCustomerRegister');
             if (User::where('email', $newCustomerRegister['email'])
                 ->orWhere('phone', $newCustomerRegister['phone'])->exists()) {
-                return $this->errorResponse($request, translate('Already_registered'));
+                return $this->errorResponse($request, translate('Already_registered'), null, 409);
             }
 
             $newUser = User::create([
@@ -640,21 +664,21 @@ public function phoneSave(Request $request)
     } catch (\Throwable $e) {
         DB::rollBack();
         \Log::error('❌ Order placement failed: '.$e->getMessage(), ['trace' => $e->getTraceAsString()]);
-        return $this->errorResponse($request, translate('Something_went_wrong'));
+        return $this->errorResponse($request, translate('Something_went_wrong'), null, 500);
     }
 }
 
 /**
  * Helper for error responses.
  */
-private function errorResponse(Request $request, string $message, ?string $redirect = null)
+private function errorResponse(Request $request, string $message, ?string $redirect = null, int $httpStatus = 400)
 {
     if ($request->ajax()) {
         return response()->json([
             'status' => 0,
             'message' => $message,
             'redirect' => $redirect,
-        ]);
+        ], $httpStatus);
     }
 
     if ($redirect) {
@@ -665,124 +689,6 @@ private function errorResponse(Request $request, string $message, ?string $redir
     Toastr::error($message);
     return back();
 }
-/* 
-    public function getCashOnDeliveryCheckoutComplete(Request $request): View|RedirectResponse|JsonResponse
-    {
-        if ($request['payment_method'] != 'cash_on_delivery') {
-            if ($request->ajax()) {
-                return response()->json([
-                   'status' => 0,
-                    'message' => translate('Something_went_wrong'),
-                ]);
-            }
-            return back()->with('error', 'Something_went_wrong');
-        }
-        $uniqueID = OrderManager::gen_unique_id();
-        $orderIds = [];
-        $cartGroupIds = CartManager::get_cart_group_ids(request: $request, type: 'checked');
-        $carts = Cart::whereHas('product', function ($query) {
-            return $query->active();
-        })->with('product')->whereIn('cart_group_id', $cartGroupIds)->where(['is_checked' => 1])->get();
-
-        
-
-        $verifyStatus = OrderManager::verifyCartListMinimumOrderAmount($request);
-        if ($verifyStatus['status'] == 0) {
-            if ($request->ajax()) {
-                return response()->json([
-                    'status' => 0,
-                    'message' => translate('check_minimum_order_amount_requirement'),
-                    'redirect' => route('shop-cart'),
-                ]);
-            }
-
-            Toastr::info(translate('check_minimum_order_amount_requirement'));
-            return redirect()->route('shop-cart');
-        }
-
-       
-
-            if (session('newCustomerRegister')) {
-                $newCustomerRegister = session('newCustomerRegister');
-                if (User::where(['email' => $newCustomerRegister['email']])->orWhere(['phone' => $newCustomerRegister['phone']])->first()) {
-                    if ($request->ajax()) {
-                        return response()->json([
-                            'status' => 0,
-                            'message' => translate('Already_registered'),
-                        ]);
-                    }
-                    Toastr::error(translate('Already_registered'));
-                    return back();
-                }
-
-                $addCustomer = User::create([
-                    'name' => $newCustomerRegister['name'],
-                    'f_name' => $newCustomerRegister['name'],
-                    'l_name' => $newCustomerRegister['l_name'],
-                    'email' => $newCustomerRegister['email'],
-                    'phone' => $newCustomerRegister['phone'],
-                    'is_active' => 1,
-                    'password' => bcrypt($newCustomerRegister['password']),
-                    'referral_code' => $newCustomerRegister['referral_code'],
-                ]);
-                session()->put('newRegisterCustomerInfo', $addCustomer);
-
-                $customerID = session()->has('guest_id') ? session('guest_id') : 0;
-                ShippingAddress::where(['customer_id' => $customerID, 'is_guest' => 1, 'id' => session('address_id')])
-                    ->update(['customer_id' => $addCustomer['id'], 'is_guest' => 0]);
-                ShippingAddress::where(['customer_id' => $customerID, 'is_guest' => 1, 'id' => session('billing_address_id')])
-                    ->update(['customer_id' => $addCustomer['id'], 'is_guest' => 0]);
-            }
-
-            foreach ($cartGroupIds as $groupId) {
-                $data = [
-                    'payment_method' => 'cash_on_delivery',
-                    'order_status' => 'pending',
-                    'payment_status' => 'unpaid',
-                    'transaction_ref' => '',
-                    'order_group_id' => $uniqueID,
-                    'cart_group_id' => $groupId
-                ];
-                $orderId = OrderManager::generate_order($data);
-                $orderIds[] = $orderId;
-              $this->sendOrderSms($orderId);
-            }
-
-            CartManager::cart_clean();
-           
-
-
-            if ($request->ajax()) {
-                return response()->json([
-                    'status' => 1,
-                    'message' => translate('Order_Placed_Successfully'),
-                    'redirect' => route('order-placed-success', ['orderIds' => json_encode($orderIds)]),
-                ]);
-            }
-
-            $isNewCustomerInSession = session('newCustomerRegister');
-            session()->forget('newCustomerRegister');
-            session()->forget('newRegisterCustomerInfo');
-            
-            
-            return view(VIEW_FILE_NAMES['order_complete'], [
-                'order_ids' => $orderIds,
-                'isNewCustomerInSession' => $isNewCustomerInSession,
-                
-            ]);
-            
-            
-       
-
-        if ($request->ajax()) {
-            return response()->json([
-                'status' => 0,
-                'message' => translate('Something_went_wrong'),
-            ]);
-        }
-        return back()->with('error', translate('Something_went_wrong'));
-    }*/
-
     public function getOrderPlaceView(Request $request): View
     {
         $isNewCustomerInSession = session('newCustomerRegister');

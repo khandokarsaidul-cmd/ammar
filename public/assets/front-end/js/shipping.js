@@ -383,21 +383,22 @@ function checkoutFromShipping() {
             $('#loading').hide();
         },
         error: function (data) {
-            if (data.errors) {
-                for (var i = 0; i < data.errors.length; i++) {
-                    toastr.error(data.errors[i].message, {
+            let response = data.responseJSON || {};
+            if (response.errors && Array.isArray(response.errors) && response.errors.length > 0) {
+                for (var i = 0; i < response.errors.length; i++) {
+                    toastr.error(response.errors[i].message, {
                         CloseButton: true,
                         ProgressBar: true
                     });
                 }
-            } else {
-                let error_msg = data.responseJSON.errors;
-                console.log(data.responseJSON)
-                toastr.error(error_msg, {
-                    CloseButton: true,
-                    ProgressBar: true
-                });
+                return;
             }
+
+            let errorMsg = response.message || response.errors || 'Something went wrong!';
+            toastr.error(errorMsg, {
+                CloseButton: true,
+                ProgressBar: true
+            });
         }
     });
 }
