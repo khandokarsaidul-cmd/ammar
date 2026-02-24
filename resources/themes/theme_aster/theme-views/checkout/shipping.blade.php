@@ -235,7 +235,7 @@
                                                                         class="form-control select_picker select2">
                                                                     @forelse($countries as $country)
                                                                         <option
-                                                                            value="{{ $country['name'] }}">{{ $country['name'] }}</option>
+                                                                            value="{{ $country['name'] }}" {{ !getWebConfig(name: 'delivery_country_restriction') && strtolower($country['name']) === 'bangladesh' ? 'selected' : '' }}>{{ $country['name'] }}</option>
                                                                     @empty
                                                                         <option
                                                                             value="">{{ translate('no_country_to_deliver') }}</option>
@@ -592,23 +592,7 @@
                                                                         </select>
                                                                     </div>
                                                                 </div>
-                                                                <div class="col-sm-6">
-                                                                    <div class="form-group mb-3">
-                                                                        <label
-                                                                            for="billing-country">{{ translate('country') }}</label>
-                                                                        <select name="billing_country"
-                                                                                id="billing-country"
-                                                                                class="form-control select_picker select2">
-                                                                            @forelse($countries as $country)
-                                                                                <option
-                                                                                    value="{{ $country['name'] }}">{{ $country['name'] }}</option>
-                                                                            @empty
-                                                                                <option
-                                                                                    value="">{{ translate('no_country_to_deliver') }}</option>
-                                                                            @endforelse
-                                                                        </select>
-                                                                    </div>
-                                                                </div>
+                                                                <input type="hidden" name="billing_country" id="billing-country" value="{{ getWebConfig(name: 'delivery_country_restriction') ? (data_get($countries, '0.name') ?? 'Bangladesh') : 'Bangladesh' }}">
                                                                 <div class="col-sm-6">
                                                                     <div class="form-group mb-3">
                                                                         <label
